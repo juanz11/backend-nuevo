@@ -43,7 +43,7 @@
 
     <div class="container">
         <div class="text-center p-5 text-muted">
-            <h1>Divisas Totales: 0,00 USD</h1>
+            <h1>Divisas Totales: <span id="balance">0,00</span> USD</h1>
         </div>
 
         <div>
@@ -182,6 +182,26 @@
         </div>
     </div>
 
+    <script>
+        (async function () {
+            try {
+                const res = await fetch('/api/resumen', { headers: { 'Accept': 'application/json' } });
+                if (!res.ok) return;
+
+                const data = await res.json();
+                const balance = Number(data.balance ?? 0);
+                const formatted = new Intl.NumberFormat('es-VE', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                }).format(balance);
+
+                const el = document.getElementById('balance');
+                if (el) el.textContent = formatted;
+            } catch (e) {
+                //
+            }
+        })();
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
 </body>
 </html>
