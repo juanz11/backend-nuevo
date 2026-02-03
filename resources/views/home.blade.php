@@ -129,7 +129,7 @@
 
         <div class="mt-4" id="result_table">
             <div class="w-100 border border-dark bg-dark rounded-top text-white p-2 d-flex justify-content-end">
-                <div>Resultados obtenidos: 0</div>
+                <div>Resultados obtenidos: <span id="results_count">0</span></div>
             </div>
 
             <div class="table-responsive">
@@ -150,33 +150,14 @@
                             <th>Acciones</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        <tr>
-                            <td>Salida</td>
-                            <td class="text-end">0</td>
-                            <td>---</td>
-                            <td>---</td>
-                            <td>---</td>
-                            <td>---</td>
-                            <td>--/--/----</td>
-                            <td class="text-end">0</td>
-                            <td class="text-end">0</td>
-                            <td>---</td>
-                            <td><i class="fas fa-eye"></i></td>
-                            <td><button type="button" class="btn"><i class="fas fa-trash"></i></button></td>
-                        </tr>
-                    </tbody>
+                    <tbody id="transacciones_tbody"></tbody>
                 </table>
             </div>
 
             <div class="w-100 d-flex justify-content-center align-items-center" style="height: 50px;"></div>
             <div class="w-100 d-flex justify-content-center">
                 <div class="text-center">
-                    <ul class="pagination">
-                        <li class="page-item disabled"><span class="page-link">Anterior</span></li>
-                        <li class="page-item active"><span class="page-link">1</span></li>
-                        <li class="page-item disabled"><span class="page-link">Siguiente</span></li>
-                    </ul>
+                    <ul class="pagination" id="pagination"></ul>
                 </div>
             </div>
         </div>
@@ -185,20 +166,156 @@
     <script>
         (async function () {
             try {
-                const res = await fetch('/api/resumen', { headers: { 'Accept': 'application/json' } });
-                if (!res.ok) return;
+                const fmt2 = new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                const fmtDate = new Intl.DateTimeFormat('es-VE');
 
-                const data = await res.json();
-                const balance = Number(data.balance ?? 0);
-                const formatted = new Intl.NumberFormat('es-VE', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                }).format(balance);
+                async function loadResumen() {
+                    const res = await fetch('/api/resumen', { headers: { 'Accept': 'application/json' } });
+                    if (!res.ok) return;
 
-                const el = document.getElementById('balance');
-                if (el) el.textContent = formatted;
+                    const contentType = res.headers.get('content-type') ?? '';
+                    if (!contentType.includes('application/json')) return;
+
+                    const data = await res.json();
+                    const balance = Number(data.balance ?? 0);
+                    const el = document.getElementById('balance');
+                    if (el) el.textContent = fmt2.format(balance);
+                }
+
+                function escapeHtml(value) {
+                    return String(value ?? '')
+                        .replaceAll('&', '&amp;')
+                        .replaceAll('<', '&lt;')
+                        .replaceAll('>', '&gt;')
+                        .replaceAll('"', '&quot;')
+                        .replaceAll("'", '&#039;');
+                }
+
+                function renderPagination(payload, state) {
+                    const ul = document.getElementById('pagination');
+                    if (!ul) return;
+
+                    const current = Number(payload.current_page ?? state.page);
+                    const last = Number(payload.last_page ?? current);
+                    const prevDisabled = current <= 1;
+                    const nextDisabled = current >= last;
+
+                    ul.innerHTML = '';
+
+                    const makeItem = (label, disabled, onClick, active) => {
+                        const li = document.createElement('li');
+                        li.className = 'page-item' + (disabled ? ' disabled' : '') + (active ? ' active' : '');
+                        const a = document.createElement('a');
+                        a.className = 'page-link';
+                        a.href = '#';
+                        a.textContent = label;
+                        if (!disabled) {
+                            a.addEventListener('click', (e) => {
+                                e.preventDefault();
+                                onClick();
+                            });
+                        }
+                        li.appendChild(a);
+                        return li;
+                    };
+
+                    ul.appendChild(makeItem('Anterior', prevDisabled, () => loadTransacciones(current - 1, state), false));
+                    ul.appendChild(makeItem(String(current), true, () => {}, true));
+                    ul.appendChild(makeItem('Siguiente', nextDisabled, () => loadTransacciones(current + 1, state), false));
+                }
+
+                async function loadTransacciones(page, state) {
+                    const url = new URL('/api/transacciones', window.location.origin);
+                    url.searchParams.set('page', String(page));
+                    url.searchParams.set('orderBy', state.orderBy);
+                    url.searchParams.set('orderDirection', state.orderDirection);
+                    url.searchParams.set('perPage', String(state.perPage));
+
+                    const res = await fetch(url.toString(), { headers: { 'Accept': 'application/json' } });
+                    const tbody = document.getElementById('transacciones_tbody');
+                    const countEl = document.getElementById('results_count');
+                    if (!res.ok) {
+                        let details = '';
+                        try {
+                            const contentType = res.headers.get('content-type') ?? '';
+                            if (contentType.includes('application/json')) {
+                                const err = await res.json();
+                                if (err && typeof err.message === 'string' && err.message.length > 0) {
+                                    details = `: ${err.message}`;
+                                }
+                            }
+                        } catch (e) {
+                        }
+                        if (tbody) {
+                            tbody.innerHTML = `<tr><td colspan="12">Error cargando transacciones (${escapeHtml(res.status)})${escapeHtml(details)}</td></tr>`;
+                        }
+                        if (countEl) countEl.textContent = '0';
+                        renderPagination({ current_page: 1, last_page: 1 }, state);
+                        return;
+                    }
+
+                    const contentType = res.headers.get('content-type') ?? '';
+                    if (!contentType.includes('application/json')) {
+                        if (tbody) {
+                            tbody.innerHTML = `<tr><td colspan="12">Error cargando transacciones (respuesta no JSON)</td></tr>`;
+                        }
+                        if (countEl) countEl.textContent = '0';
+                        renderPagination({ current_page: 1, last_page: 1 }, state);
+                        return;
+                    }
+
+                    const payload = await res.json();
+                    const data = Array.isArray(payload.data) ? payload.data : [];
+                    if (tbody) {
+                        if (data.length === 0) {
+                            tbody.innerHTML = `<tr><td colspan="12">Sin resultados</td></tr>`;
+                        } else {
+                        tbody.innerHTML = data.map((t) => {
+                            const tipo = t?.tipo_transaccion?.descripcion ?? '---';
+                            const monto = fmt2.format(Number(t?.monto ?? 0));
+                            const metodoSalida = t?.metodo_salida?.descripcion ?? '---';
+                            const refSalida = t?.referencia_salida ?? '---';
+                            const metodoEntrada = t?.metodo_entrada?.descripcion ?? '---';
+                            const refEntrada = t?.referencia_entrada ?? '---';
+                            const fecha = t?.fecha ? fmtDate.format(new Date(t.fecha)) : '--/--/----';
+                            const tasa = fmt2.format(Number(t?.tasa ?? 0));
+                            const conversion = fmt2.format(Number(t?.conversion ?? 0));
+                            const cv = t?.comprador_vendedor ?? '---';
+                            const obs = t?.observacion ?? '---';
+
+                            return `
+                                <tr>
+                                    <td>${escapeHtml(tipo)}</td>
+                                    <td class="text-end">${escapeHtml(monto)}</td>
+                                    <td>${escapeHtml(metodoSalida)}</td>
+                                    <td>${escapeHtml(refSalida)}</td>
+                                    <td>${escapeHtml(metodoEntrada)}</td>
+                                    <td>${escapeHtml(refEntrada)}</td>
+                                    <td>${escapeHtml(fecha)}</td>
+                                    <td class="text-end">${escapeHtml(tasa)}</td>
+                                    <td class="text-end">${escapeHtml(conversion)}</td>
+                                    <td>${escapeHtml(cv)}</td>
+                                    <td>${escapeHtml(obs)}</td>
+                                    <td><i class="fas fa-eye"></i></td>
+                                    <td><button type="button" class="btn" disabled><i class="fas fa-trash"></i></button></td>
+                                </tr>
+                            `;
+                        }).join('');
+                        }
+                    }
+                    if (countEl) countEl.textContent = String(payload.total ?? data.length);
+
+                    renderPagination(payload, { ...state, page: Number(payload.current_page ?? page) });
+                }
+
+                const state = { page: 1, orderBy: 'fecha', orderDirection: 'desc', perPage: 15 };
+                await loadResumen();
+                await loadTransacciones(state.page, state);
             } catch (e) {
-                //
+                const tbody = document.getElementById('transacciones_tbody');
+                const countEl = document.getElementById('results_count');
+                if (tbody) tbody.innerHTML = `<tr><td colspan="12">Error cargando transacciones</td></tr>`;
+                if (countEl) countEl.textContent = '0';
             }
         })();
     </script>
