@@ -27,6 +27,15 @@ Route::middleware('auth')->prefix('api')->group(function () {
         ]);
     });
 
+    Route::get('/metodos', function () {
+        $metodos = DB::table('metodos_es')
+            ->select(['id', 'descripcion'])
+            ->orderBy('id')
+            ->get();
+
+        return response()->json($metodos);
+    });
+
     Route::get('/transacciones', function (Request $request) {
         try {
             $orderBy = (string) $request->query('orderBy', 'fecha');
@@ -45,11 +54,10 @@ Route::middleware('auth')->prefix('api')->group(function () {
             $orderDirection = in_array($orderDirection, ['asc', 'desc'], true) ? $orderDirection : 'desc';
             $perPage = $perPage > 0 && $perPage <= 100 ? $perPage : 15;
 
-            $paginator = DB::table('transacciones as t')
+            $query = DB::table('transacciones as t')
                 ->leftJoin('metodos_es as me', 'me.id', '=', 't.metodo_entrada_id')
                 ->leftJoin('metodos_es as ms', 'ms.id', '=', 't.metodo_salida_id')
                 ->whereNull('t.deleted_at')
-                ->orderByRaw($orderColumn.' '.$orderDirection)
                 ->select([
                     't.id',
                     't.tipo_transaccion_id',
@@ -75,7 +83,78 @@ Route::middleware('auth')->prefix('api')->group(function () {
                     'ms.orden_saldos as metodo_salida__orden_saldos',
                 ])
                 ->selectRaw("t.tipo_transaccion_id as tipo_transaccion__id")
-                ->selectRaw("case t.tipo_transaccion_id when 1 then 'Compra' when 2 then 'Venta' when 3 then 'Entrada' when 4 then 'Salida' when 5 then 'Cambio' else '---' end as tipo_transaccion__descripcion")
+                ->selectRaw("case t.tipo_transaccion_id when 1 then 'Compra' when 2 then 'Venta' when 3 then 'Entrada' when 4 then 'Salida' when 5 then 'Cambio' else '---' end as tipo_transaccion__descripcion");
+
+            $tipoTransaccionId = (int) $request->query('tipo_transaccion_id', 0);
+            if ($tipoTransaccionId > 0) {
+                $query->where('t.tipo_transaccion_id', '=', $tipoTransaccionId);
+            }
+
+            $metodoSalidaId = (int) $request->query('metodo_salida_id', 0);
+            if ($metodoSalidaId > 0) {
+                $query->where('t.metodo_salida_id', '=', $metodoSalidaId);
+            }
+
+            $metodoEntradaId = (int) $request->query('metodo_entrada_id', 0);
+            if ($metodoEntradaId > 0) {
+                $query->where('t.metodo_entrada_id', '=', $metodoEntradaId);
+            }
+
+            $referenciaSalida = trim((string) $request->query('referencia_salida', ''));
+            if ($referenciaSalida !== '') {
+                $query->where('t.referencia_salida', 'like', '%'.$referenciaSalida.'%');
+            }
+
+            $referenciaEntrada = trim((string) $request->query('referencia_entrada', ''));
+            if ($referenciaEntrada !== '') {
+                $query->where('t.referencia_entrada', 'like', '%'.$referenciaEntrada.'%');
+            }
+
+            $fecha = trim((string) $request->query('fecha', ''));
+            if ($fecha !== '') {
+                $query->whereDate('t.fecha', '=', $fecha);
+            }
+
+            $compradorVendedor = trim((string) $request->query('comprador_vendedor', ''));
+            if ($compradorVendedor !== '') {
+                $query->where('t.comprador_vendedor', 'like', '%'.$compradorVendedor.'%');
+            }
+
+            $observacion = trim((string) $request->query('observacion', ''));
+            if ($observacion !== '') {
+                $query->where('t.observacion', 'like', '%'.$observacion.'%');
+            }
+
+            $normalizeDecimal = function ($value) {
+                $s = trim((string) $value);
+                if ($s === '' || $s === '0' || $s === '0.00' || $s === '0,00') {
+                    return null;
+                }
+
+                $s = str_replace(' ', '', $s);
+                $s = str_replace('.', '', $s);
+                $s = str_replace(',', '.', $s);
+
+                return is_numeric($s) ? (float) $s : null;
+            };
+
+            $monto = $normalizeDecimal($request->query('monto'));
+            if ($monto !== null) {
+                $query->where('t.monto', '=', $monto);
+            }
+
+            $tasa = $normalizeDecimal($request->query('tasa'));
+            if ($tasa !== null) {
+                $query->where('t.tasa', '=', $tasa);
+            }
+
+            $conversion = $normalizeDecimal($request->query('conversion'));
+            if ($conversion !== null) {
+                $query->where('t.conversion', '=', $conversion);
+            }
+
+            $paginator = $query
+                ->orderByRaw($orderColumn.' '.$orderDirection)
                 ->paginate($perPage)
                 ->appends($request->query());
 

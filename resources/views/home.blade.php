@@ -9,9 +9,12 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet" integrity="sha512-SnH5WK+bZxgPHs44uWIX+LLJAJ9/2PkPKZ5QiAj6Ta86w+fsb2TkcmfRyVX3pBnMFcV7oQPJkl9QevSCWr3W6A==" crossorigin="anonymous" referrerpolicy="no-referrer" />
     <style>
         body {
-            background: radial-gradient(1000px 600px at 20% 0%, rgba(30, 68, 148, 0.10), transparent 60%),
-                        radial-gradient(800px 500px at 90% 10%, rgba(251, 113, 133, 0.08), transparent 55%),
-                        #f6f8fb;
+            background:
+                linear-gradient(180deg, rgba(246, 248, 251, 0.92) 0%, rgba(246, 248, 251, 0.92) 100%),
+                url('/WhatsApp%20Image%202026-02-04%20at%203.03.10%20PM%20(002).jpeg');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
         }
         .app-navbar {
             backdrop-filter: blur(10px);
@@ -274,6 +277,76 @@
                     if (el) el.textContent = fmt2.format(balance);
                 }
 
+                function getFiltersFromUrl() {
+                    const params = new URLSearchParams(window.location.search);
+
+                    return {
+                        tipo_transaccion_id: params.get('tipo_transaccion_id') ?? '0',
+                        monto: params.get('monto') ?? '',
+                        metodo_salida_id: params.get('metodo_salida_id') ?? '0',
+                        referencia_salida: params.get('referencia_salida') ?? '',
+                        metodo_entrada_id: params.get('metodo_entrada_id') ?? '0',
+                        referencia_entrada: params.get('referencia_entrada') ?? '',
+                        fecha: params.get('fecha') ?? '',
+                        tasa: params.get('tasa') ?? '',
+                        conversion: params.get('conversion') ?? '',
+                        comprador_vendedor: params.get('comprador_vendedor') ?? '',
+                        observacion: params.get('observacion') ?? '',
+                    };
+                }
+
+                function applyFiltersToForm(filters) {
+                    const setValue = (name, value) => {
+                        const el = document.querySelector(`[name="${name}"]`);
+                        if (!el) return;
+                        el.value = value;
+                    };
+
+                    setValue('tipo_transaccion_id', filters.tipo_transaccion_id);
+                    setValue('monto', filters.monto);
+                    setValue('metodo_salida_id', filters.metodo_salida_id);
+                    setValue('referencia_salida', filters.referencia_salida);
+                    setValue('metodo_entrada_id', filters.metodo_entrada_id);
+                    setValue('referencia_entrada', filters.referencia_entrada);
+                    setValue('fecha', filters.fecha);
+                    setValue('tasa', filters.tasa);
+                    setValue('conversion', filters.conversion);
+                    setValue('comprador_vendedor', filters.comprador_vendedor);
+                    setValue('observacion', filters.observacion);
+                }
+
+                async function loadMetodos(filters) {
+                    const res = await fetch('/api/metodos', { headers: { 'Accept': 'application/json' } });
+                    if (!res.ok) return;
+
+                    const contentType = res.headers.get('content-type') ?? '';
+                    if (!contentType.includes('application/json')) return;
+
+                    const metodos = await res.json();
+                    const opts = Array.isArray(metodos) ? metodos : [];
+
+                    const buildOptions = (selectedValue) => {
+                        const base = '<option value="0">Todos</option>';
+                        const rows = opts.map((m) => {
+                            const id = String(m.id ?? '');
+                            const desc = escapeHtml(m.descripcion ?? '---');
+                            const selected = id === String(selectedValue) ? ' selected' : '';
+                            return `<option value="${escapeHtml(id)}"${selected}>${desc}</option>`;
+                        }).join('');
+                        return base + rows;
+                    };
+
+                    const selSalida = document.querySelector('[name="metodo_salida_id"]');
+                    if (selSalida) {
+                        selSalida.innerHTML = buildOptions(filters.metodo_salida_id);
+                    }
+
+                    const selEntrada = document.querySelector('[name="metodo_entrada_id"]');
+                    if (selEntrada) {
+                        selEntrada.innerHTML = buildOptions(filters.metodo_entrada_id);
+                    }
+                }
+
                 function escapeHtml(value) {
                     return String(value ?? '')
                         .replaceAll('&', '&amp;')
@@ -323,12 +396,21 @@
                     url.searchParams.set('orderDirection', state.orderDirection);
                     url.searchParams.set('perPage', String(state.perPage));
 
-                    const res = await fetch(url.toString(), { headers: { 'Accept': 'application/json' } });
+                    const filters = state.filters ?? {};
+                    Object.entries(filters).forEach(([k, v]) => {
+                        if (v === null || v === undefined) return;
+                        const s = String(v);
+                        if (s === '') return;
+                        if ((k === 'tipo_transaccion_id' || k === 'metodo_salida_id' || k === 'metodo_entrada_id') && s === '0') return;
+                        url.searchParams.set(k, s);
+                    });
                     const tbody = document.getElementById('transacciones_tbody');
                     const countEl = document.getElementById('results_count');
                     if (tbody) {
                         tbody.innerHTML = `<tr><td colspan="12" class="text-muted">Cargando...</td></tr>`;
                     }
+
+                    const res = await fetch(url.toString(), { headers: { 'Accept': 'application/json' } });
                     if (!res.ok) {
                         let details = '';
                         try {
@@ -411,7 +493,11 @@
                     renderPagination(payload, { ...state, page: Number(payload.current_page ?? page) });
                 }
 
-                const state = { page: 1, orderBy: 'fecha', orderDirection: 'desc', perPage: 15 };
+                const filters = getFiltersFromUrl();
+                applyFiltersToForm(filters);
+                await loadMetodos(filters);
+
+                const state = { page: 1, orderBy: 'fecha', orderDirection: 'desc', perPage: 15, filters };
                 await loadResumen();
                 await loadTransacciones(state.page, state);
             } catch (e) {
