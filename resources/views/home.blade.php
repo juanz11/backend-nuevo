@@ -7,9 +7,63 @@
     <title>Control de divisas</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet" integrity="sha512-SnH5WK+bZxgPHs44uWIX+LLJAJ9/2PkPKZ5QiAj6Ta86w+fsb2TkcmfRyVX3pBnMFcV7oQPJkl9QevSCWr3W6A==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <style>
+        body {
+            background: radial-gradient(1000px 600px at 20% 0%, rgba(30, 68, 148, 0.10), transparent 60%),
+                        radial-gradient(800px 500px at 90% 10%, rgba(251, 113, 133, 0.08), transparent 55%),
+                        #f6f8fb;
+        }
+        .app-navbar {
+            backdrop-filter: blur(10px);
+        }
+        .card-soft {
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+        }
+        .table thead th {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+        }
+        .table > :not(caption) > * > * {
+            padding: .85rem .75rem;
+        }
+        .badge-soft {
+            background: rgba(30, 68, 148, 0.10);
+            color: #1E4494;
+            border: 1px solid rgba(30, 68, 148, 0.18);
+        }
+        .badge-type {
+            border: 1px solid rgba(15, 23, 42, 0.10);
+        }
+        .badge-type-entrada {
+            background: rgba(34, 197, 94, 0.15);
+            color: #166534;
+            border-color: rgba(34, 197, 94, 0.25);
+        }
+        .badge-type-salida {
+            background: rgba(239, 68, 68, 0.15);
+            color: #7f1d1d;
+            border-color: rgba(239, 68, 68, 0.25);
+        }
+        .badge-type-compra,
+        .badge-type-venta {
+            background: rgba(59, 130, 246, 0.15);
+            color: #1e3a8a;
+            border-color: rgba(59, 130, 246, 0.25);
+        }
+        .badge-type-cambio {
+            background: rgba(168, 85, 247, 0.15);
+            color: #581c87;
+            border-color: rgba(168, 85, 247, 0.25);
+        }
+        .pagination .page-link {
+            border-radius: .75rem;
+        }
+    </style>
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+    <nav class="navbar navbar-expand-lg bg-white border-bottom app-navbar">
         <div class="container">
             <a class="navbar-brand" href="/">
                 <img src="https://control.sncpharma.com/img/snclogo.svg" width="30" height="30" class="d-inline-block align-top" alt="logo-snc">
@@ -41,14 +95,49 @@
         </div>
     </nav>
 
-    <div class="container">
-        <div class="text-center p-5 text-muted">
-            <h1>Divisas Totales: <span id="balance">0,00</span> USD</h1>
+    <div class="container py-4 py-lg-5">
+        <div class="row g-3 align-items-stretch mb-3 mb-lg-4">
+            <div class="col-12 col-lg-8">
+                <div class="card card-soft rounded-4">
+                    <div class="card-body p-4 p-lg-5">
+                        <div class="d-flex align-items-center justify-content-between gap-3">
+                            <div>
+                                <div class="text-uppercase small text-muted">Balance</div>
+                                <div class="display-6 fw-semibold mb-0">USD <span id="balance">0,00</span></div>
+                            </div>
+                            <div class="d-none d-md-flex align-items-center justify-content-center rounded-4" style="width:56px;height:56px;background:rgba(30,68,148,.10);color:#1E4494;">
+                                <i class="fas fa-sack-dollar fa-lg"></i>
+                            </div>
+                        </div>
+                        <div class="mt-3 text-muted">Divisas Totales</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-lg-4">
+                <div class="card card-soft rounded-4 h-100">
+                    <div class="card-body p-4">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <div class="fw-semibold">Sesión</div>
+                            <span class="badge badge-soft rounded-pill">Activa</span>
+                        </div>
+                        <div class="mt-3 text-muted small">{{ auth()->user()->email }}</div>
+                        <div class="mt-3">
+                            <form method="POST" action="{{ route('logout') }}" class="d-inline">
+                                @csrf
+                                <button type="submit" class="btn btn-outline-dark w-100">
+                                    <i class="fas fa-power-off me-1"></i>Cerrar Sesión
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div>
-            <form class="bg-white border p-4" method="GET" action="/">
-                <div class="row">
+            <form class="card card-soft rounded-4" method="GET" action="/">
+                <div class="card-body p-4">
+                <div class="row g-3">
                     <div class="mb-3 col-lg-2 col-12">
                         <label class="form-label">Tipo de transacción</label>
                         <select name="tipo_transaccion_id" class="form-select">
@@ -117,24 +206,28 @@
                 </div>
 
                 <div>
-                    <fieldset class="d-flex flex-wrap gap-2">
-                        <button type="submit" class="btn btn-primary">Filtrar</button>
-                        <a href="/" class="btn btn-secondary">Limpiar filtro</a>
-                        <button type="button" class="btn btn-success">Excel<i class="fas fa-download ms-1"></i></button>
-                        <button type="button" class="btn btn-success">PDF<i class="fas fa-download ms-1"></i></button>
+                    <fieldset class="d-flex flex-wrap gap-2 justify-content-end">
+                        <button type="submit" class="btn btn-primary px-4">Filtrar</button>
+                        <a href="/" class="btn btn-outline-secondary px-4">Limpiar</a>
+                        <button type="button" class="btn btn-outline-success px-4">Excel<i class="fas fa-download ms-1"></i></button>
+                        <button type="button" class="btn btn-outline-success px-4">PDF<i class="fas fa-download ms-1"></i></button>
                     </fieldset>
+                </div>
                 </div>
             </form>
         </div>
 
         <div class="mt-4" id="result_table">
-            <div class="w-100 border border-dark bg-dark rounded-top text-white p-2 d-flex justify-content-end">
-                <div>Resultados obtenidos: <span id="results_count">0</span></div>
-            </div>
+            <div class="card card-soft rounded-4">
+                <div class="card-body p-3 p-lg-4">
+                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+                        <div class="fw-semibold">Transacciones</div>
+                        <div class="text-muted">Resultados: <span id="results_count">0</span></div>
+                    </div>
 
-            <div class="table-responsive">
-                <table class="text-center table table-bordered">
-                    <thead class="bg-dark text-white border border-dark">
+            <div class="table-responsive" style="max-height: 65vh;">
+                <table class="text-center table table-hover table-striped align-middle mb-0">
+                    <thead class="bg-dark text-white">
                         <tr>
                             <th>Tipo</th>
                             <th>Monto USD <i class="fas fa-sort text-white"></i></th>
@@ -154,10 +247,9 @@
                 </table>
             </div>
 
-            <div class="w-100 d-flex justify-content-center align-items-center" style="height: 50px;"></div>
-            <div class="w-100 d-flex justify-content-center">
-                <div class="text-center">
-                    <ul class="pagination" id="pagination"></ul>
+                    <div class="pt-3 d-flex justify-content-center">
+                        <ul class="pagination mb-0" id="pagination"></ul>
+                    </div>
                 </div>
             </div>
         </div>
@@ -234,6 +326,9 @@
                     const res = await fetch(url.toString(), { headers: { 'Accept': 'application/json' } });
                     const tbody = document.getElementById('transacciones_tbody');
                     const countEl = document.getElementById('results_count');
+                    if (tbody) {
+                        tbody.innerHTML = `<tr><td colspan="12" class="text-muted">Cargando...</td></tr>`;
+                    }
                     if (!res.ok) {
                         let details = '';
                         try {
@@ -272,6 +367,14 @@
                         } else {
                         tbody.innerHTML = data.map((t) => {
                             const tipo = t?.tipo_transaccion?.descripcion ?? '---';
+                            const tipoSlug = String(tipo).toLowerCase();
+                            const tipoClass =
+                                tipoSlug === 'entrada' ? 'badge-type-entrada' :
+                                tipoSlug === 'salida' ? 'badge-type-salida' :
+                                tipoSlug === 'compra' ? 'badge-type-compra' :
+                                tipoSlug === 'venta' ? 'badge-type-venta' :
+                                tipoSlug === 'cambio' ? 'badge-type-cambio' :
+                                'badge-soft';
                             const monto = fmt2.format(Number(t?.monto ?? 0));
                             const metodoSalida = t?.metodo_salida?.descripcion ?? '---';
                             const refSalida = t?.referencia_salida ?? '---';
@@ -285,7 +388,7 @@
 
                             return `
                                 <tr>
-                                    <td>${escapeHtml(tipo)}</td>
+                                    <td><span class="badge rounded-pill badge-type ${escapeHtml(tipoClass)}">${escapeHtml(tipo)}</span></td>
                                     <td class="text-end">${escapeHtml(monto)}</td>
                                     <td>${escapeHtml(metodoSalida)}</td>
                                     <td>${escapeHtml(refSalida)}</td>
