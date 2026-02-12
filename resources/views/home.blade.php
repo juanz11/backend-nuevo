@@ -23,10 +23,24 @@
             border: 1px solid rgba(15, 23, 42, 0.08);
             box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
         }
+        .table-responsive {
+            position: relative;
+            isolation: isolate;
+            overflow: auto;
+        }
         .table thead th {
             position: sticky;
             top: 0;
-            z-index: 2;
+            z-index: 5;
+        }
+        .table tbody td {
+            position: relative;
+            z-index: 1;
+        }
+        .table tbody td .btn,
+        .table tbody td i {
+            position: relative;
+            z-index: 1;
         }
         .table > :not(caption) > * > * {
             padding: .85rem .75rem;
@@ -481,8 +495,16 @@
                                     <td class="text-end">${escapeHtml(conversion)}</td>
                                     <td>${escapeHtml(cv)}</td>
                                     <td>${escapeHtml(obs)}</td>
-                                    <td><i class="fas fa-eye"></i></td>
-                                    <td><button type="button" class="btn" disabled><i class="fas fa-trash"></i></button></td>
+                                    <td>
+                                        <div class="d-flex align-items-center justify-content-center gap-2">
+                                            <button type="button" class="btn btn-sm btn-outline-secondary" disabled title="Ver">
+                                                <i class="fas fa-eye"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-danger" disabled title="Eliminar">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </div>
+                                    </td>
                                 </tr>
                             `;
                         }).join('');
