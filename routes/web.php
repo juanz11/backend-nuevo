@@ -16,6 +16,10 @@ Route::get('/', function () {
     return view('home');
 })->middleware('auth');
 
+Route::get('/carga', function () {
+    return view('carga');
+})->middleware('auth');
+
 Route::middleware('auth')->prefix('api')->group(function () {
     Route::get('/resumen', function () {
         $resumen = DB::selectOne('select entradas, salidas, balance from resumen_transacciones');
