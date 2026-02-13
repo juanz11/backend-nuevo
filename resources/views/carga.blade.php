@@ -144,11 +144,43 @@
                     </div>
 
                     <div class="d-flex align-items-center gap-2 mt-4">
-                        <button type="submit" class="btn btn-primary px-4">Guardar</button>
+                        <button type="button" class="btn btn-outline-primary px-4" id="btn_add">Agregar a lista</button>
+                        <button type="button" class="btn btn-primary px-4" id="btn_save_all">Guardar todos</button>
                         <span class="text-muted" id="save_status"></span>
                     </div>
                 </fieldset>
             </form>
+        </div>
+    </div>
+
+    <div class="card card-soft rounded-4 mt-4">
+        <div class="card-body p-3 p-lg-4">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+                <div class="fw-semibold">Registros en cola</div>
+                <div class="text-muted">Total: <span id="queue_count">0</span></div>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-striped table-hover align-middle mb-0">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>#</th>
+                            <th>Tipo</th>
+                            <th class="text-end">Monto</th>
+                            <th class="text-end">Tasa</th>
+                            <th class="text-end">Conversión</th>
+                            <th>Fecha</th>
+                            <th>Mét. Entrada</th>
+                            <th>Ref. Entrada</th>
+                            <th>Mét. Salida</th>
+                            <th>Ref. Salida</th>
+                            <th>Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody id="queue_tbody">
+                        <tr><td colspan="11" class="text-muted">Sin registros</td></tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 </div>
@@ -157,6 +189,65 @@
     (async function () {
         const fmt2 = new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
+
+        const queue = [];
+        const metodosMap = new Map();
+
+        function tipoText(id) {
+            const v = Number(id);
+            if (v === 1) return 'Compra';
+            if (v === 2) return 'Venta';
+            if (v === 3) return 'Entrada';
+            if (v === 4) return 'Salida';
+            if (v === 5) return 'Cambio';
+            return '---';
+        }
+
+        function renderQueue() {
+            const tbody = document.getElementById('queue_tbody');
+            const count = document.getElementById('queue_count');
+            if (count) count.textContent = String(queue.length);
+            if (!tbody) return;
+
+            if (queue.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="11" class="text-muted">Sin registros</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = queue.map((it, idx) => {
+                const conv = Number(it.monto) * Number(it.tasa);
+                const me = metodosMap.get(String(it.metodo_entrada_id ?? '')) ?? '---';
+                const ms = metodosMap.get(String(it.metodo_salida_id ?? '')) ?? '---';
+                return `
+                    <tr>
+                        <td>${idx + 1}</td>
+                        <td>${tipoText(it.tipo_transaccion_id)}</td>
+                        <td class="text-end">${fmt2.format(Number(it.monto ?? 0))}</td>
+                        <td class="text-end">${fmt2.format(Number(it.tasa ?? 0))}</td>
+                        <td class="text-end">${fmt2.format(conv)}</td>
+                        <td>${String(it.fecha ?? '')}</td>
+                        <td>${me}</td>
+                        <td>${String(it.referencia_entrada ?? '')}</td>
+                        <td>${ms}</td>
+                        <td>${String(it.referencia_salida ?? '')}</td>
+                        <td>
+                            <button type="button" class="btn btn-sm btn-outline-danger" data-idx="${idx}">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            tbody.querySelectorAll('button[data-idx]').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const i = Number(btn.getAttribute('data-idx'));
+                    if (!Number.isFinite(i)) return;
+                    queue.splice(i, 1);
+                    renderQueue();
+                });
+            });
+        }
 
         function parseDecimal(value) {
             let s = String(value ?? '').trim();
@@ -195,6 +286,13 @@
             const metodos = await res.json();
             const opts = Array.isArray(metodos) ? metodos : [];
 
+            metodosMap.clear();
+            opts.forEach((m) => {
+                const id = String(m.id ?? '');
+                const desc = String(m.descripcion ?? '---');
+                metodosMap.set(id, desc);
+            });
+
             const html = opts.map((m) => {
                 const id = String(m.id ?? '');
                 const desc = String(m.descripcion ?? '---');
@@ -217,38 +315,119 @@
         if (tasaEl) tasaEl.addEventListener('input', updateConversion);
 
         const form = document.getElementById('form_carga');
-        if (form) {
-            form.addEventListener('submit', async (e) => {
-                e.preventDefault();
+        const btnAdd = document.getElementById('btn_add');
+        const btnSaveAll = document.getElementById('btn_save_all');
+
+        function readCurrentPayload() {
+            if (!form) return null;
+            const formData = new FormData(form);
+            const monto = parseDecimal(formData.get('monto'));
+            const tasa = parseDecimal(formData.get('tasa'));
+
+            return {
+                tipo_transaccion_id: Number(formData.get('tipo_transaccion_id') ?? 0),
+                monto: formatDecimalForApi(monto),
+                metodo_entrada_id: Number(formData.get('metodo_entrada_id') ?? 0),
+                metodo_salida_id: Number(formData.get('metodo_salida_id') ?? 0),
+                referencia_entrada: String(formData.get('referencia_entrada') ?? ''),
+                referencia_salida: String(formData.get('referencia_salida') ?? ''),
+                fecha: String(formData.get('fecha') ?? ''),
+                tasa: formatDecimalForApi(tasa),
+                comprador_vendedor: String(formData.get('comprador_vendedor') ?? ''),
+                observacion: String(formData.get('observacion') ?? ''),
+            };
+        }
+
+        function validatePayload(payload) {
+            const errs = [];
+            const tipo = Number(payload?.tipo_transaccion_id ?? 0);
+            const isEntrada = tipo === 3;
+            const isSalida = tipo === 4;
+
+            if (!tipo) errs.push('Debe seleccionar tipo de transacción');
+            if (!payload?.fecha) errs.push('El campo fecha es obligatorio');
+            if (payload?.monto === null || payload?.monto === undefined || payload?.monto === '') errs.push('El campo monto es obligatorio');
+            if (payload?.tasa === null || payload?.tasa === undefined || payload?.tasa === '') errs.push('El campo tasa es obligatorio');
+
+            if (!isSalida) {
+                if (!Number(payload?.metodo_entrada_id ?? 0)) errs.push('El método de entrada es obligatorio');
+                if (!String(payload?.referencia_entrada ?? '').trim()) errs.push('La referencia de entrada es obligatoria');
+            }
+
+            if (!isEntrada) {
+                if (!Number(payload?.metodo_salida_id ?? 0)) errs.push('El método de pago SNC es obligatorio');
+                if (!String(payload?.referencia_salida ?? '').trim()) errs.push('La referencia de salida es obligatoria');
+            }
+
+            return errs;
+        }
+
+        function flattenErrors(errors) {
+            if (!errors) return [];
+            if (Array.isArray(errors)) return errors.map(String);
+            if (typeof errors !== 'object') return [String(errors)];
+
+            const out = [];
+            Object.entries(errors).forEach(([k, v]) => {
+                if (Array.isArray(v)) {
+                    v.forEach((msg) => out.push(`${k}: ${msg}`));
+                    return;
+                }
+                if (v && typeof v === 'object') {
+                    Object.entries(v).forEach(([k2, v2]) => {
+                        if (Array.isArray(v2)) {
+                            v2.forEach((msg) => out.push(`#${Number(k) + 1} ${k2}: ${msg}`));
+                        } else {
+                            out.push(`#${Number(k) + 1} ${k2}: ${String(v2)}`);
+                        }
+                    });
+                    return;
+                }
+                out.push(`${k}: ${String(v)}`);
+            });
+
+            return out;
+        }
+
+        if (btnAdd) {
+            btnAdd.addEventListener('click', () => {
                 const status = document.getElementById('save_status');
-                if (status) status.textContent = 'Guardando...';
+                const payload = readCurrentPayload();
+                if (!payload) return;
+
+                const errs = validatePayload(payload);
+                if (errs.length > 0) {
+                    if (status) status.textContent = `Error: ${errs[0]}`;
+                    return;
+                }
+
+                queue.push(payload);
+                renderQueue();
+                if (status) status.textContent = 'Agregado a la lista';
+                if (form) form.reset();
+                updateConversion();
+            });
+        }
+
+        if (btnSaveAll) {
+            btnSaveAll.addEventListener('click', async () => {
+                const status = document.getElementById('save_status');
+                if (queue.length === 0) {
+                    if (status) status.textContent = 'No hay registros en cola';
+                    return;
+                }
+
+                if (status) status.textContent = 'Guardando lista...';
 
                 try {
-                    const formData = new FormData(form);
-                    const monto = parseDecimal(formData.get('monto'));
-                    const tasa = parseDecimal(formData.get('tasa'));
-
-                    const payload = {
-                        tipo_transaccion_id: Number(formData.get('tipo_transaccion_id') ?? 0),
-                        monto: formatDecimalForApi(monto),
-                        metodo_entrada_id: Number(formData.get('metodo_entrada_id') ?? 0),
-                        metodo_salida_id: Number(formData.get('metodo_salida_id') ?? 0),
-                        referencia_entrada: String(formData.get('referencia_entrada') ?? ''),
-                        referencia_salida: String(formData.get('referencia_salida') ?? ''),
-                        fecha: String(formData.get('fecha') ?? ''),
-                        tasa: formatDecimalForApi(tasa),
-                        comprador_vendedor: String(formData.get('comprador_vendedor') ?? ''),
-                        observacion: String(formData.get('observacion') ?? ''),
-                    };
-
-                    const res = await fetch('/api/transacciones', {
+                    const res = await fetch('/api/transacciones/bulk', {
                         method: 'POST',
                         headers: {
                             'Accept': 'application/json',
                             'Content-Type': 'application/json',
                             'X-CSRF-TOKEN': csrfToken,
                         },
-                        body: JSON.stringify(payload),
+                        body: JSON.stringify({ items: queue }),
                     });
 
                     const contentType = res.headers.get('content-type') ?? '';
@@ -258,18 +437,30 @@
                     if (!res.ok) {
                         let msg = `Error guardando (${res.status})`;
                         if (data?.message) msg += `: ${data.message}`;
+                        const details = flattenErrors(data?.errors);
+                        if (details.length > 0) msg += ` | ${details[0]}`;
                         if (status) status.textContent = msg;
                         return;
                     }
 
+                    queue.splice(0, queue.length);
+                    renderQueue();
                     if (status) status.textContent = data?.message ?? 'Guardado';
-                    form.reset();
+                    if (form) form.reset();
                     updateConversion();
                 } catch (err) {
                     if (status) status.textContent = 'Error guardando';
                 }
             });
         }
+
+        if (form) {
+            form.addEventListener('submit', (e) => {
+                e.preventDefault();
+            });
+        }
+
+        renderQueue();
     })();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>

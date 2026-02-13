@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#1E4494">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Control de divisas</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet" integrity="sha512-SnH5WK+bZxgPHs44uWIX+LLJAJ9/2PkPKZ5QiAj6Ta86w+fsb2TkcmfRyVX3pBnMFcV7oQPJkl9QevSCWr3W6A==" crossorigin="anonymous" referrerpolicy="no-referrer" />
@@ -272,11 +273,44 @@
         </div>
     </div>
 
+    <div class="modal fade" id="modal_confirm_delete" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Confirmar eliminación</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    ¿Está seguro de eliminar esta transacción?
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">No</button>
+                    <button type="button" class="btn btn-danger" id="btn_confirm_delete">Sí, eliminar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         (async function () {
             try {
                 const fmt2 = new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                 const fmtDate = new Intl.DateTimeFormat('es-VE');
+                const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
+
+                let pendingDeleteId = null;
+                const modalEl = document.getElementById('modal_confirm_delete');
+                const btnConfirmDelete = document.getElementById('btn_confirm_delete');
+
+                function getDeleteModal() {
+                    try {
+                        if (!modalEl) return null;
+                        if (!window.bootstrap || !window.bootstrap.Modal) return null;
+                        return window.bootstrap.Modal.getOrCreateInstance(modalEl);
+                    } catch (e) {
+                        return null;
+                    }
+                }
 
                 async function loadResumen() {
                     const res = await fetch('/api/resumen', { headers: { 'Accept': 'application/json' } });
@@ -481,6 +515,7 @@
                             const conversion = fmt2.format(Number(t?.conversion ?? 0));
                             const cv = t?.comprador_vendedor ?? '---';
                             const obs = t?.observacion ?? '---';
+                            const id = Number(t?.id ?? 0);
 
                             return `
                                 <tr>
@@ -497,7 +532,7 @@
                                     <td>${escapeHtml(obs)}</td>
                                     <td>
                                         <div class="d-flex align-items-center justify-content-center">
-                                            <button type="button" class="btn btn-sm btn-outline-danger" disabled title="Eliminar">
+                                            <button type="button" class="btn btn-sm btn-outline-danger btn-delete" data-id="${escapeHtml(String(id))}" title="Eliminar" ${id > 0 ? '' : 'disabled'}>
                                                 <i class="fas fa-trash"></i>
                                             </button>
                                         </div>
@@ -505,6 +540,21 @@
                                 </tr>
                             `;
                         }).join('');
+
+                        tbody.querySelectorAll('button.btn-delete[data-id]').forEach((btn) => {
+                            btn.addEventListener('click', () => {
+                                const id = Number(btn.getAttribute('data-id'));
+                                if (!Number.isFinite(id) || id <= 0) return;
+                                pendingDeleteId = id;
+                                const m = getDeleteModal();
+                                if (m) {
+                                    m.show();
+                                } else {
+                                    const ok = window.confirm('¿Está seguro de eliminar esta transacción?');
+                                    if (ok && btnConfirmDelete) btnConfirmDelete.click();
+                                }
+                            });
+                        });
                         }
                     }
                     if (countEl) countEl.textContent = String(payload.total ?? data.length);
@@ -517,6 +567,31 @@
                 await loadMetodos(filters);
 
                 const state = { page: 1, orderBy: 'fecha', orderDirection: 'desc', perPage: 15, filters };
+
+                if (btnConfirmDelete) {
+                    btnConfirmDelete.addEventListener('click', async () => {
+                        if (!pendingDeleteId) return;
+                        const id = pendingDeleteId;
+                        pendingDeleteId = null;
+                        try {
+                            const res = await fetch(`/api/transacciones/${id}`, {
+                                method: 'DELETE',
+                                headers: {
+                                    'Accept': 'application/json',
+                                    'X-CSRF-TOKEN': csrfToken,
+                                },
+                            });
+                            if (!res.ok) {
+                                return;
+                            }
+                            const m = getDeleteModal();
+                            if (m) m.hide();
+                            await loadResumen();
+                            await loadTransacciones(state.page, state);
+                        } catch (e) {
+                        }
+                    });
+                }
 
                 const btnExcel = document.getElementById('btn_excel');
                 if (btnExcel) {

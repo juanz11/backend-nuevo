@@ -28,4 +28,6 @@ Route::middleware('auth')->prefix('api')->group(function () {
     Route::get('/transacciones/excel', [TransaccionesController::class, 'excel']);
     Route::get('/transacciones/pdf', [TransaccionesController::class, 'pdf']);
     Route::post('/transacciones', [TransaccionesController::class, 'store']);
+    Route::post('/transacciones/bulk', [TransaccionesController::class, 'storeBulk']);
+    Route::delete('/transacciones/{id}', [TransaccionesController::class, 'destroy']);
 });

@@ -9,6 +9,119 @@ use Illuminate\Support\Facades\Validator;
 
 class TransaccionesController extends Controller
 {
+    private function normalizeDecimal($value)
+    {
+        $s = trim((string) $value);
+        if ($s === '') {
+            return null;
+        }
+
+        $s = str_replace(' ', '', $s);
+
+        $hasComma = strpos($s, ',') !== false;
+        $hasDot = strpos($s, '.') !== false;
+
+        if ($hasComma && $hasDot) {
+            $s = str_replace('.', '', $s);
+            $s = str_replace(',', '.', $s);
+        } elseif ($hasComma) {
+            $s = str_replace(',', '.', $s);
+        } elseif ($hasDot) {
+            $dotCount = substr_count($s, '.');
+
+            if ($dotCount > 1) {
+                $lastPos = strrpos($s, '.');
+                $decLen = $lastPos === false ? 0 : (strlen($s) - $lastPos - 1);
+
+                if ($lastPos !== false && $decLen > 0 && $decLen <= 2) {
+                    $intPart = str_replace('.', '', substr($s, 0, $lastPos));
+                    $decPart = substr($s, $lastPos + 1);
+                    $s = $intPart.'.'.$decPart;
+                } else {
+                    $s = str_replace('.', '', $s);
+                }
+            } else {
+                $pos = strrpos($s, '.');
+                $decLen = $pos === false ? 0 : (strlen($s) - $pos - 1);
+
+                if ($pos !== false && $decLen === 3) {
+                    $s = str_replace('.', '', $s);
+                }
+            }
+        }
+
+        return is_numeric($s) ? (float) $s : null;
+    }
+
+    private function validateAndBuildPayload(array $input, $userId)
+    {
+        $tipoTransaccionId = (int) ($input['tipo_transaccion_id'] ?? 0);
+        $isEntrada = $tipoTransaccionId === 3;
+        $isSalida = $tipoTransaccionId === 4;
+
+        $rules = [
+            'tipo_transaccion_id' => ['required', 'integer', 'min:1'],
+            'monto' => ['required'],
+            'tasa' => ['required'],
+            'fecha' => ['required', 'date'],
+        ];
+
+        if (!$isSalida) {
+            $rules['metodo_entrada_id'] = ['required', 'integer', 'min:1'];
+            $rules['referencia_entrada'] = ['required', 'string'];
+        }
+
+        if (!$isEntrada) {
+            $rules['metodo_salida_id'] = ['required', 'integer', 'min:1'];
+            $rules['referencia_salida'] = ['required', 'string'];
+        }
+
+        $validator = Validator::make($input, $rules, [
+            'required' => 'El campo :attribute es obligatorio.',
+        ]);
+
+        if ($validator->fails()) {
+            return [null, $validator->errors()];
+        }
+
+        $monto = $this->normalizeDecimal($input['monto'] ?? null);
+        $tasa = $this->normalizeDecimal($input['tasa'] ?? null);
+
+        if ($monto === null || $tasa === null) {
+            return [null, ['monto' => ['Monto inválido'], 'tasa' => ['Tasa inválida']]];
+        }
+
+        $metodoEntradaId = (int) ($input['metodo_entrada_id'] ?? 0);
+        $metodoSalidaId = (int) ($input['metodo_salida_id'] ?? 0);
+
+        $referenciaEntrada = trim((string) ($input['referencia_entrada'] ?? ''));
+        $referenciaSalida = trim((string) ($input['referencia_salida'] ?? ''));
+        $fecha = trim((string) ($input['fecha'] ?? ''));
+        $compradorVendedor = trim((string) ($input['comprador_vendedor'] ?? ''));
+        $observacion = trim((string) ($input['observacion'] ?? ''));
+
+        $conversion = $monto * $tasa;
+
+        $payload = [
+            'user_id' => $userId,
+            'tipo_transaccion_id' => $tipoTransaccionId,
+            'monto' => $monto,
+            'metodo_entrada_id' => $isSalida ? null : ($metodoEntradaId > 0 ? $metodoEntradaId : null),
+            'metodo_salida_id' => $isEntrada ? null : ($metodoSalidaId > 0 ? $metodoSalidaId : null),
+            'referencia_entrada' => $isSalida ? null : ($referenciaEntrada !== '' ? $referenciaEntrada : null),
+            'referencia_salida' => $isEntrada ? null : ($referenciaSalida !== '' ? $referenciaSalida : null),
+            'fecha' => $fecha,
+            'tasa' => $tasa,
+            'conversion' => $conversion,
+            'comprador_vendedor' => $compradorVendedor !== '' ? $compradorVendedor : null,
+            'observacion' => $observacion !== '' ? $observacion : null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ];
+
+        return [$payload, null];
+    }
+
     private function buildQuery(Request $request)
     {
         $query = DB::table('transacciones as t')
@@ -89,8 +202,38 @@ class TransaccionesController extends Controller
             }
 
             $s = str_replace(' ', '', $s);
-            $s = str_replace('.', '', $s);
-            $s = str_replace(',', '.', $s);
+
+            $hasComma = strpos($s, ',') !== false;
+            $hasDot = strpos($s, '.') !== false;
+
+            if ($hasComma && $hasDot) {
+                $s = str_replace('.', '', $s);
+                $s = str_replace(',', '.', $s);
+            } elseif ($hasComma) {
+                $s = str_replace(',', '.', $s);
+            } elseif ($hasDot) {
+                $dotCount = substr_count($s, '.');
+
+                if ($dotCount > 1) {
+                    $lastPos = strrpos($s, '.');
+                    $decLen = $lastPos === false ? 0 : (strlen($s) - $lastPos - 1);
+
+                    if ($lastPos !== false && $decLen > 0 && $decLen <= 2) {
+                        $intPart = str_replace('.', '', substr($s, 0, $lastPos));
+                        $decPart = substr($s, $lastPos + 1);
+                        $s = $intPart.'.'.$decPart;
+                    } else {
+                        $s = str_replace('.', '', $s);
+                    }
+                } else {
+                    $pos = strrpos($s, '.');
+                    $decLen = $pos === false ? 0 : (strlen($s) - $pos - 1);
+
+                    if ($pos !== false && $decLen === 3) {
+                        $s = str_replace('.', '', $s);
+                    }
+                }
+            }
 
             return is_numeric($s) ? (float) $s : null;
         };
@@ -319,88 +462,14 @@ class TransaccionesController extends Controller
     public function store(Request $request)
     {
         try {
-            $normalizeDecimal = function ($value) {
-                $s = trim((string) $value);
-                if ($s === '') {
-                    return null;
-                }
-
-                $s = str_replace(' ', '', $s);
-                $s = str_replace('.', '', $s);
-                $s = str_replace(',', '.', $s);
-
-                return is_numeric($s) ? (float) $s : null;
-            };
-
-            $tipoTransaccionId = (int) $request->input('tipo_transaccion_id');
-            $monto = $normalizeDecimal($request->input('monto'));
-            $tasa = $normalizeDecimal($request->input('tasa'));
-
-            $metodoEntradaId = (int) $request->input('metodo_entrada_id');
-            $metodoSalidaId = (int) $request->input('metodo_salida_id');
-
-            $referenciaEntrada = trim((string) $request->input('referencia_entrada', ''));
-            $referenciaSalida = trim((string) $request->input('referencia_salida', ''));
-            $fecha = trim((string) $request->input('fecha', ''));
-            $compradorVendedor = trim((string) $request->input('comprador_vendedor', ''));
-            $observacion = trim((string) $request->input('observacion', ''));
-
-            $isEntrada = $tipoTransaccionId === 3;
-            $isSalida = $tipoTransaccionId === 4;
-
-            $rules = [
-                'tipo_transaccion_id' => ['required', 'integer', 'min:1'],
-                'monto' => ['required'],
-                'tasa' => ['required'],
-                'fecha' => ['required', 'date'],
-            ];
-
-            if (!$isSalida) {
-                $rules['metodo_entrada_id'] = ['required', 'integer', 'min:1'];
-                $rules['referencia_entrada'] = ['required', 'string'];
-            }
-
-            if (!$isEntrada) {
-                $rules['metodo_salida_id'] = ['required', 'integer', 'min:1'];
-                $rules['referencia_salida'] = ['required', 'string'];
-            }
-
-            $validator = Validator::make($request->all(), $rules, [
-                'required' => 'El campo :attribute es obligatorio.',
-            ]);
-
-            if ($validator->fails()) {
+            $user = $request->user();
+            [$payload, $errors] = $this->validateAndBuildPayload($request->all(), $user?->id);
+            if ($errors !== null) {
                 return response()->json([
                     'message' => 'Validación fallida',
-                    'errors' => $validator->errors(),
+                    'errors' => $errors,
                 ], 422);
             }
-
-            if ($monto === null || $tasa === null) {
-                return response()->json([
-                    'message' => 'Monto y tasa deben ser numéricos',
-                ], 422);
-            }
-
-            $conversion = $monto * $tasa;
-            $user = $request->user();
-
-            $payload = [
-                'user_id' => $user?->id,
-                'tipo_transaccion_id' => $tipoTransaccionId,
-                'monto' => $monto,
-                'metodo_entrada_id' => $isSalida ? null : ($metodoEntradaId > 0 ? $metodoEntradaId : null),
-                'metodo_salida_id' => $isEntrada ? null : ($metodoSalidaId > 0 ? $metodoSalidaId : null),
-                'referencia_entrada' => $isSalida ? null : ($referenciaEntrada !== '' ? $referenciaEntrada : null),
-                'referencia_salida' => $isEntrada ? null : ($referenciaSalida !== '' ? $referenciaSalida : null),
-                'fecha' => $fecha,
-                'tasa' => $tasa,
-                'conversion' => $conversion,
-                'comprador_vendedor' => $compradorVendedor !== '' ? $compradorVendedor : null,
-                'observacion' => $observacion !== '' ? $observacion : null,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ];
 
             $id = DB::table('transacciones')->insertGetId($payload);
 
@@ -408,6 +477,104 @@ class TransaccionesController extends Controller
                 'message' => 'Transacción creada correctamente',
                 'id' => $id,
             ], 201);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function storeBulk(Request $request)
+    {
+        try {
+            $user = $request->user();
+            $items = $request->input('items');
+
+            if (!is_array($items) || count($items) === 0) {
+                return response()->json([
+                    'message' => 'Debe enviar items',
+                ], 422);
+            }
+
+            if (count($items) > 200) {
+                return response()->json([
+                    'message' => 'Máximo 200 registros por carga',
+                ], 422);
+            }
+
+            $ids = [];
+            $rowErrors = [];
+
+            DB::beginTransaction();
+
+            foreach ($items as $idx => $input) {
+                if (!is_array($input)) {
+                    $rowErrors[$idx] = ['item' => ['Formato inválido']];
+                    continue;
+                }
+
+                [$payload, $errors] = $this->validateAndBuildPayload($input, $user?->id);
+                if ($errors !== null) {
+                    $rowErrors[$idx] = $errors;
+                    continue;
+                }
+
+                $ids[] = DB::table('transacciones')->insertGetId($payload);
+            }
+
+            if (count($rowErrors) > 0) {
+                DB::rollBack();
+                return response()->json([
+                    'message' => 'Validación fallida',
+                    'errors' => $rowErrors,
+                ], 422);
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'Transacciones creadas correctamente',
+                'ids' => $ids,
+            ], 201);
+        } catch (\Throwable $e) {
+            try {
+                DB::rollBack();
+            } catch (\Throwable $e2) {
+            }
+
+            return response()->json([
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function destroy(Request $request, $id)
+    {
+        try {
+            $id = (int) $id;
+            if ($id <= 0) {
+                return response()->json([
+                    'message' => 'ID inválido',
+                ], 422);
+            }
+
+            $affected = DB::table('transacciones')
+                ->where('id', '=', $id)
+                ->whereNull('deleted_at')
+                ->update([
+                    'deleted_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+            if ($affected === 0) {
+                return response()->json([
+                    'message' => 'Transacción no encontrada',
+                ], 404);
+            }
+
+            return response()->json([
+                'message' => 'Transacción eliminada',
+            ], 200);
         } catch (\Throwable $e) {
             return response()->json([
                 'message' => $e->getMessage(),
