@@ -25,5 +25,6 @@ Route::middleware('auth')->prefix('api')->group(function () {
     Route::get('/resumen', [ResumenController::class, 'show']);
     Route::get('/metodos', [MetodosController::class, 'index']);
     Route::get('/transacciones', [TransaccionesController::class, 'index']);
+    Route::get('/transacciones/excel', [TransaccionesController::class, 'excel']);
     Route::post('/transacciones', [TransaccionesController::class, 'store']);
 });
