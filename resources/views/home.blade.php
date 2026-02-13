@@ -227,7 +227,7 @@
                         <button type="submit" class="btn btn-primary px-4">Filtrar</button>
                         <a href="/" class="btn btn-outline-secondary px-4">Limpiar</a>
                         <button id="btn_excel" type="button" class="btn btn-outline-success px-4">Excel<i class="fas fa-download ms-1"></i></button>
-                        <button type="button" class="btn btn-outline-success px-4">PDF<i class="fas fa-download ms-1"></i></button>
+                        <button id="btn_pdf" type="button" class="btn btn-outline-success px-4">PDF<i class="fas fa-download ms-1"></i></button>
                     </fieldset>
                 </div>
                 </div>
@@ -538,6 +538,27 @@
                         });
 
                         window.location.href = url.toString();
+                    });
+                }
+
+                const btnPdf = document.getElementById('btn_pdf');
+                if (btnPdf) {
+                    btnPdf.addEventListener('click', () => {
+                        const url = new URL('/api/transacciones/pdf', window.location.origin);
+                        url.searchParams.set('orderBy', state.orderBy);
+                        url.searchParams.set('orderDirection', state.orderDirection);
+                        url.searchParams.set('print', '1');
+
+                        const f = state.filters ?? {};
+                        Object.entries(f).forEach(([k, v]) => {
+                            if (v === null || v === undefined) return;
+                            const s = String(v);
+                            if (s === '') return;
+                            if ((k === 'tipo_transaccion_id' || k === 'metodo_salida_id' || k === 'metodo_entrada_id') && s === '0') return;
+                            url.searchParams.set(k, s);
+                        });
+
+                        window.open(url.toString(), '_blank');
                     });
                 }
 

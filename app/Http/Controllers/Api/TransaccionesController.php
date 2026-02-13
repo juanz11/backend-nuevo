@@ -190,6 +190,56 @@ class TransaccionesController extends Controller
         }
     }
 
+    public function pdf(Request $request)
+    {
+        try {
+            $rows = $this->applyOrdering($request, $this->buildQuery($request))->get();
+
+            $fmt = function ($v) {
+                if ($v === null || $v === '') {
+                    return '';
+                }
+                if (is_numeric($v)) {
+                    return number_format((float) $v, 2, ',', '.');
+                }
+                return (string) $v;
+            };
+
+            $mapped = array_map(function ($r) use ($fmt) {
+                $r = (array) $r;
+                $r['monto_fmt'] = $fmt($r['monto'] ?? '');
+                $r['tasa_fmt'] = $fmt($r['tasa'] ?? '');
+                $r['conversion_fmt'] = $fmt($r['conversion'] ?? '');
+                return $r;
+            }, $rows->all());
+
+            $filters = [];
+            $tipoTransaccionId = (int) $request->query('tipo_transaccion_id', 0);
+            if ($tipoTransaccionId > 0) $filters[] = 'tipo=' . $tipoTransaccionId;
+            $metodoSalidaId = (int) $request->query('metodo_salida_id', 0);
+            if ($metodoSalidaId > 0) $filters[] = 'salida=' . $metodoSalidaId;
+            $metodoEntradaId = (int) $request->query('metodo_entrada_id', 0);
+            if ($metodoEntradaId > 0) $filters[] = 'entrada=' . $metodoEntradaId;
+            $fecha = trim((string) $request->query('fecha', ''));
+            if ($fecha !== '') $filters[] = 'fecha=' . $fecha;
+
+            $generatedAt = now()->format('Y-m-d H:i:s');
+            $filtersText = implode(' | ', $filters);
+
+            return response()
+                ->view('pdf.transacciones', [
+                    'rows' => $mapped,
+                    'generatedAt' => $generatedAt,
+                    'filtersText' => $filtersText,
+                ])
+                ->header('Content-Type', 'text/html; charset=UTF-8');
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
     public function excel(Request $request)
     {
         try {
