@@ -496,10 +496,7 @@
                                     <td>${escapeHtml(cv)}</td>
                                     <td>${escapeHtml(obs)}</td>
                                     <td>
-                                        <div class="d-flex align-items-center justify-content-center gap-2">
-                                            <button type="button" class="btn btn-sm btn-outline-secondary" disabled title="Ver">
-                                                <i class="fas fa-eye"></i>
-                                            </button>
+                                        <div class="d-flex align-items-center justify-content-center">
                                             <button type="button" class="btn btn-sm btn-outline-danger" disabled title="Eliminar">
                                                 <i class="fas fa-trash"></i>
                                             </button>
