@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#1E4494">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Cargar - Control de divisas</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet" integrity="sha512-SnH5WK+bZxgPHs44uWIX+LLJAJ9/2PkPKZ5QiAj6Ta86w+fsb2TkcmfRyVX3pBnMFcV7oQPJkl9QevSCWr3W6A==" crossorigin="anonymous" referrerpolicy="no-referrer" />
@@ -155,6 +156,7 @@
 <script>
     (async function () {
         const fmt2 = new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
 
         function parseDecimal(value) {
             let s = String(value ?? '').trim();
@@ -164,6 +166,12 @@
             s = s.replace(/,/g, '.');
             const n = Number(s);
             return Number.isFinite(n) ? n : 0;
+        }
+
+        function formatDecimalForApi(n) {
+            const num = Number(n);
+            if (!Number.isFinite(num)) return '0.00';
+            return num.toFixed(2);
         }
 
         function updateConversion() {
@@ -210,10 +218,56 @@
 
         const form = document.getElementById('form_carga');
         if (form) {
-            form.addEventListener('submit', (e) => {
+            form.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const status = document.getElementById('save_status');
-                if (status) status.textContent = 'Pendiente implementar guardado';
+                if (status) status.textContent = 'Guardando...';
+
+                try {
+                    const formData = new FormData(form);
+                    const monto = parseDecimal(formData.get('monto'));
+                    const tasa = parseDecimal(formData.get('tasa'));
+
+                    const payload = {
+                        tipo_transaccion_id: Number(formData.get('tipo_transaccion_id') ?? 0),
+                        monto: formatDecimalForApi(monto),
+                        metodo_entrada_id: Number(formData.get('metodo_entrada_id') ?? 0),
+                        metodo_salida_id: Number(formData.get('metodo_salida_id') ?? 0),
+                        referencia_entrada: String(formData.get('referencia_entrada') ?? ''),
+                        referencia_salida: String(formData.get('referencia_salida') ?? ''),
+                        fecha: String(formData.get('fecha') ?? ''),
+                        tasa: formatDecimalForApi(tasa),
+                        comprador_vendedor: String(formData.get('comprador_vendedor') ?? ''),
+                        observacion: String(formData.get('observacion') ?? ''),
+                    };
+
+                    const res = await fetch('/api/transacciones', {
+                        method: 'POST',
+                        headers: {
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': csrfToken,
+                        },
+                        body: JSON.stringify(payload),
+                    });
+
+                    const contentType = res.headers.get('content-type') ?? '';
+                    const isJson = contentType.includes('application/json');
+                    const data = isJson ? await res.json() : null;
+
+                    if (!res.ok) {
+                        let msg = `Error guardando (${res.status})`;
+                        if (data?.message) msg += `: ${data.message}`;
+                        if (status) status.textContent = msg;
+                        return;
+                    }
+
+                    if (status) status.textContent = data?.message ?? 'Guardado';
+                    form.reset();
+                    updateConversion();
+                } catch (err) {
+                    if (status) status.textContent = 'Error guardando';
+                }
             });
         }
     })();
