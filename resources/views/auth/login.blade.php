@@ -8,14 +8,14 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
 </head>
 <body>
-    <div class="w-100 min-vh-100" style="background-image: url('https://control.sncpharma.com/img/login-bg.jpg'); background-size: cover; background-position: center;">
+    <div class="w-100 min-vh-100" style="background-image: url('https://control.eukatiapy.com/img/login-bg.jpg'); background-size: cover; background-position: center;">
         <div class="w-100 d-flex justify-content-center pt-5 px-3">
             <div class="card p-4 bg-light" style="width: 100%; max-width: 420px;">
                 <form method="POST" action="{{ route('login') }}">
                     @csrf
 
                     <div class="text-center mb-3">
-                        <img src="https://control.sncpharma.com/img/snclogo.svg" alt="logo-snc" width="150" height="150">
+                        <img src="https://control.eukatiapy.com/img/snclogo.svg" alt="logo-snc" width="150" height="150">
                     </div>
 
                     @if ($errors->any())

@@ -84,7 +84,7 @@
     <nav class="navbar navbar-expand-lg bg-white border-bottom app-navbar">
         <div class="container">
             <a class="navbar-brand" href="/">
-                <img src="https://control.sncpharma.com/img/snclogo.svg" width="30" height="30" class="d-inline-block align-top" alt="logo-snc">
+                <img src="https://control.eukatiapy.com/img/snclogo.svg" width="30" height="30" class="d-inline-block align-top" alt="logo-snc">
             </a>
 
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#basic-navbar-nav" aria-controls="basic-navbar-nav" aria-expanded="false" aria-label="Toggle navigation">

@@ -37,7 +37,7 @@
 <nav class="navbar navbar-expand-lg bg-white border-bottom app-navbar">
     <div class="container">
         <a class="navbar-brand" href="/">
-            <img src="https://control.sncpharma.com/img/snclogo.svg" width="30" height="30" class="d-inline-block align-top" alt="logo-snc">
+            <img src="https://control.eukatiapy.com/img/snclogo.svg" width="30" height="30" class="d-inline-block align-top" alt="logo-snc">
         </a>
 
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#basic-navbar-nav" aria-controls="basic-navbar-nav" aria-expanded="false" aria-label="Toggle navigation">
@@ -146,6 +146,8 @@
                     <div class="d-flex align-items-center gap-2 mt-4">
                         <button type="button" class="btn btn-outline-primary px-4" id="btn_add">Agregar a lista</button>
                         <button type="button" class="btn btn-primary px-4" id="btn_save_all">Guardar todos</button>
+                        <button type="button" class="btn btn-outline-secondary px-4" id="btn_import_excel">Importar Excel</button>
+                        <input type="file" id="file_excel" accept=".xlsx,.xls" class="d-none">
                         <span class="text-muted" id="save_status"></span>
                     </div>
                 </fieldset>
@@ -185,6 +187,7 @@
     </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
     (async function () {
         const fmt2 = new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -192,6 +195,7 @@
 
         const queue = [];
         const metodosMap = new Map();
+        const metodosDescToId = new Map();
 
         function tipoText(id) {
             const v = Number(id);
@@ -287,10 +291,12 @@
             const opts = Array.isArray(metodos) ? metodos : [];
 
             metodosMap.clear();
+            metodosDescToId.clear();
             opts.forEach((m) => {
                 const id = String(m.id ?? '');
                 const desc = String(m.descripcion ?? '---');
                 metodosMap.set(id, desc);
+                metodosDescToId.set(desc.trim().toLowerCase(), id);
             });
 
             const html = opts.map((m) => {
@@ -317,6 +323,8 @@
         const form = document.getElementById('form_carga');
         const btnAdd = document.getElementById('btn_add');
         const btnSaveAll = document.getElementById('btn_save_all');
+        const btnImportExcel = document.getElementById('btn_import_excel');
+        const fileExcel = document.getElementById('file_excel');
 
         function readCurrentPayload() {
             if (!form) return null;
@@ -389,6 +397,134 @@
             return out;
         }
 
+        function normalizeHeader(s) {
+            return String(s ?? '')
+                .trim()
+                .toLowerCase()
+                .replace(/\s+/g, ' ');
+        }
+
+        function mapTipoToId(value) {
+            const s = String(value ?? '').trim().toLowerCase();
+            if (s === 'compra') return 1;
+            if (s === 'venta') return 2;
+            if (s === 'entrada') return 3;
+            if (s === 'salida') return 4;
+            if (s === 'cambio') return 5;
+            return 0;
+        }
+
+        function parseExcelDate(v) {
+            if (!v) return '';
+            if (v instanceof Date && !Number.isNaN(v.getTime())) {
+                const y = v.getFullYear();
+                const m = String(v.getMonth() + 1).padStart(2, '0');
+                const d = String(v.getDate()).padStart(2, '0');
+                return `${y}-${m}-${d}`;
+            }
+            const s = String(v).trim();
+            if (!s) return '';
+
+            const m1 = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+            if (m1) {
+                const dd = String(m1[1]).padStart(2, '0');
+                const mm = String(m1[2]).padStart(2, '0');
+                const yy = m1[3];
+                return `${yy}-${mm}-${dd}`;
+            }
+
+            const m2 = s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+            if (m2) {
+                const yy = m2[1];
+                const mm = String(m2[2]).padStart(2, '0');
+                const dd = String(m2[3]).padStart(2, '0');
+                return `${yy}-${mm}-${dd}`;
+            }
+
+            return '';
+        }
+
+        function metodoDescToId(desc) {
+            const key = String(desc ?? '').trim().toLowerCase();
+            const id = metodosDescToId.get(key);
+            return id ? Number(id) : 0;
+        }
+
+        async function importExcelFile(file) {
+            const status = document.getElementById('save_status');
+            if (!file) return;
+            if (status) status.textContent = 'Importando Excel...';
+
+            try {
+                if (!window.XLSX) {
+                    if (status) status.textContent = 'No se pudo cargar la librería de Excel';
+                    return;
+                }
+
+                const buf = await file.arrayBuffer();
+                const wb = window.XLSX.read(buf, { type: 'array', cellDates: true });
+                const sheetName = wb.SheetNames?.[0];
+                if (!sheetName) {
+                    if (status) status.textContent = 'El Excel no tiene hojas';
+                    return;
+                }
+
+                const ws = wb.Sheets[sheetName];
+                const rows = window.XLSX.utils.sheet_to_json(ws, { defval: '' });
+                if (!Array.isArray(rows) || rows.length === 0) {
+                    if (status) status.textContent = 'El Excel no tiene registros';
+                    return;
+                }
+
+                let added = 0;
+                rows.forEach((r) => {
+                    const obj = {};
+                    Object.entries(r).forEach(([k, v]) => {
+                        obj[normalizeHeader(k)] = v;
+                    });
+
+                    const tipoId = mapTipoToId(obj['tipo']);
+                    if (!tipoId) return;
+
+                    const monto = parseDecimal(obj['monto'] ?? obj['monto usd'] ?? obj['monto usd ']);
+                    const tasa = parseDecimal(obj['tasa'] ?? obj['tasa (bs)'] ?? obj['tasa bs'] ?? obj['tasa de cambio']);
+
+                    const metodoSalidaId = metodoDescToId(obj['método de pago snc'] ?? obj['metodo de pago snc'] ?? obj['método pago snc'] ?? obj['metodo pago snc']);
+                    const refSalida = String(obj['referencia pago snc'] ?? obj['ref de salida'] ?? obj['referencia de salida'] ?? obj['referencia salida'] ?? '').trim();
+                    const metodoEntradaId = metodoDescToId(obj['método de entrada'] ?? obj['metodo de entrada'] ?? obj['método entrada'] ?? obj['metodo entrada']);
+                    const refEntrada = String(obj['referencia de entrada'] ?? obj['ref de entrada'] ?? obj['referencia entrada'] ?? '').trim();
+
+                    const fecha = parseExcelDate(obj['fecha']);
+                    const cv = String(obj['comprador/vendedor'] ?? obj['comprador vendedor'] ?? obj['comprador'] ?? '').trim();
+                    const obs = String(obj['observación'] ?? obj['observacion'] ?? '').trim();
+
+                    const payload = {
+                        tipo_transaccion_id: tipoId,
+                        monto: formatDecimalForApi(monto),
+                        metodo_entrada_id: metodoEntradaId,
+                        metodo_salida_id: metodoSalidaId,
+                        referencia_entrada: refEntrada,
+                        referencia_salida: refSalida,
+                        fecha,
+                        tasa: formatDecimalForApi(tasa),
+                        comprador_vendedor: cv,
+                        observacion: obs,
+                    };
+
+                    const errs = validatePayload(payload);
+                    if (errs.length > 0) return;
+                    queue.push(payload);
+                    added += 1;
+                });
+
+                renderQueue();
+                if (status) status.textContent = `Importación lista: ${added} registros agregados`;
+            } catch (e) {
+                const status = document.getElementById('save_status');
+                if (status) status.textContent = 'Error importando Excel';
+            }
+        }
+
         if (btnAdd) {
             btnAdd.addEventListener('click', () => {
                 const status = document.getElementById('save_status');
@@ -451,6 +587,15 @@
                 } catch (err) {
                     if (status) status.textContent = 'Error guardando';
                 }
+            });
+        }
+
+        if (btnImportExcel && fileExcel) {
+            btnImportExcel.addEventListener('click', () => fileExcel.click());
+            fileExcel.addEventListener('change', async () => {
+                const file = fileExcel.files && fileExcel.files[0] ? fileExcel.files[0] : null;
+                await importExcelFile(file);
+                fileExcel.value = '';
             });
         }
 
